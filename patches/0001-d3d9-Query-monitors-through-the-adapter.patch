@@ -1,0 +1,184 @@
+From befdc687946adc6c19893c5e9f7db46d1d1b3969 Mon Sep 17 00:00:00 2001
+From: IJsbrand Slob <ijsbrand@mirast.com>
+Date: Tue, 3 Nov 2026 17:54:44 +0100
+Subject: [PATCH 1/5] [d3d9] Query monitors through the adapter
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/d3d9/d3d9_adapter.cpp   | 10 ++++++----
+ src/d3d9/d3d9_device.cpp    |  4 ++--
+ src/d3d9/d3d9_swapchain.cpp | 12 +++++++-----
+ src/d3d9/d3d9_swapchain.h   |  7 ++++++-
+ src/d3d9/d3d9_window.cpp    |  2 +-
+ 5 files changed, 22 insertions(+), 13 deletions(-)
+
+diff --git a/src/d3d9/d3d9_adapter.cpp b/src/d3d9/d3d9_adapter.cpp
+index 8cb7fbf3..a502b3eb 100644
+--- a/src/d3d9/d3d9_adapter.cpp
++++ b/src/d3d9/d3d9_adapter.cpp
+@@ -69,7 +69,7 @@ namespace dxvk {
+       return D3DERR_INVALIDCALL;
+ 
+     WCHAR wideDisplayName[32] = { };
+-    if (!wsi::getDisplayName(wsi::getDefaultMonitor(), wideDisplayName)) {
++    if (!wsi::getDisplayName(GetMonitor(), wideDisplayName)) {
+       Logger::err("D3D9Adapter::GetAdapterIdentifier: Failed to query monitor info");
+       return D3DERR_INVALIDCALL;
+     }
+@@ -857,7 +857,7 @@ namespace dxvk {
+ 
+     wsi::WsiMode mode = { };
+ 
+-    if (!wsi::getCurrentDisplayMode(wsi::getDefaultMonitor(), &mode)) {
++    if (!wsi::getCurrentDisplayMode(GetMonitor(), &mode)) {
+       Logger::err("D3D9Adapter::GetAdapterDisplayModeEx: Failed to enum display settings");
+       return D3DERR_INVALIDCALL;
+     }
+@@ -980,11 +980,13 @@ namespace dxvk {
+ 
+     const auto forcedRatio = Ratio<DWORD>(options.forceAspectRatio);
+ 
++    HMONITOR monitor = GetMonitor();
++
+     wsi::WsiMode currentMode = { };
+     wsi::WsiMode currentCompatibleMode = { };
+ 
+     if (options.modeCountCompatibility) {
+-      wsi::getDesktopDisplayMode(wsi::getDefaultMonitor(), &currentMode);
++      wsi::getDesktopDisplayMode(monitor, &currentMode);
+ 
+       if (likely(currentMode.width)) {
+         // Skip checking the compabilitiy refresh rate (60 Hz),
+@@ -1005,7 +1007,7 @@ namespace dxvk {
+ 
+     uint32_t modeIndex = 0;
+ 
+-    while (wsi::getDisplayMode(wsi::getDefaultMonitor(), modeIndex++, &devMode)) {
++    while (wsi::getDisplayMode(monitor, modeIndex++, &devMode)) {
+       // Skip interlaced modes altogether
+       if (devMode.interlaced)
+         continue;
+diff --git a/src/d3d9/d3d9_device.cpp b/src/d3d9/d3d9_device.cpp
+index 1c34094d..846a8f07 100644
+--- a/src/d3d9/d3d9_device.cpp
++++ b/src/d3d9/d3d9_device.cpp
+@@ -4519,7 +4519,7 @@ namespace dxvk {
+     m_implicitSwapchain->Invalidate(pPresentationParameters->hDeviceWindow);
+ 
+     try {
+-      auto* swapchain = new D3D9SwapChainEx(this, pPresentationParameters, pFullscreenDisplayMode, false);
++      auto* swapchain = new D3D9SwapChainEx(this, pPresentationParameters, pFullscreenDisplayMode, false, m_adapter);
+       *ppSwapChain = ref(swapchain);
+       m_losableResourceCounter++;
+     }
+@@ -8887,7 +8887,7 @@ namespace dxvk {
+         return hr;
+     }
+     else {
+-      m_implicitSwapchain = new D3D9SwapChainEx(this, pPresentationParameters, pFullscreenDisplayMode, true);
++      m_implicitSwapchain = new D3D9SwapChainEx(this, pPresentationParameters, pFullscreenDisplayMode, true, m_adapter);
+       m_mostRecentlyUsedSwapchain = m_implicitSwapchain.ptr();
+     }
+ 
+diff --git a/src/d3d9/d3d9_swapchain.cpp b/src/d3d9/d3d9_swapchain.cpp
+index 79e13143..9fb8667a 100644
+--- a/src/d3d9/d3d9_swapchain.cpp
++++ b/src/d3d9/d3d9_swapchain.cpp
+@@ -17,10 +17,12 @@ namespace dxvk {
+           D3D9DeviceEx*          pDevice,
+           D3DPRESENT_PARAMETERS* pPresentParams,
+     const D3DDISPLAYMODEEX*      pFullscreenDisplayMode,
+-          bool                   EnableLatencyTracking)
++          bool                   EnableLatencyTracking,
++          D3D9Adapter*           pAdapter)
+     : D3D9SwapChainExBase(pDevice)
+     , m_device           (pDevice->GetDXVKDevice())
+     , m_frameLatencyCap  (pDevice->GetOptions()->maxFrameLatency)
++    , m_adapter          (pAdapter)
+     , m_latencyTracking  (EnableLatencyTracking)
+     , m_swapchainExt     (this) {
+     this->NormalizePresentParameters(pPresentParams);
+@@ -605,7 +607,7 @@ namespace dxvk {
+ 
+       wsi::WsiMode devMode = { };
+ 
+-      if (!wsi::getCurrentDisplayMode(wsi::getDefaultMonitor(), &devMode)) {
++      if (!wsi::getCurrentDisplayMode(m_adapter->GetMonitor(), &devMode)) {
+         Logger::err("D3D9SwapChainEx::GetDisplayModeEx: Failed to enum display settings");
+         return D3DERR_INVALIDCALL;
+       }
+@@ -833,7 +835,7 @@ namespace dxvk {
+         pPresentParams->BackBufferHeight ? nullptr : &pPresentParams->BackBufferHeight);
+     }
+     else {
+-      wsi::getMonitorClientSize(wsi::getDefaultMonitor(),
++      wsi::getMonitorClientSize(m_adapter->GetMonitor(),
+         pPresentParams->BackBufferWidth  ? nullptr : &pPresentParams->BackBufferWidth,
+         pPresentParams->BackBufferHeight ? nullptr : &pPresentParams->BackBufferHeight);
+     }
+@@ -1255,7 +1257,7 @@ namespace dxvk {
+ 
+     D3D9WindowMessageFilter filter(m_window);
+     
+-    m_monitor = wsi::getDefaultMonitor();
++    m_monitor = m_adapter->GetMonitor();
+ 
+     wsi::saveWindowState(m_window, &m_windowState, true);
+ 
+@@ -1311,7 +1313,7 @@ namespace dxvk {
+ 
+     wsi::WsiMode wsiMode = ConvertDisplayMode(mode);
+     
+-    HMONITOR monitor = wsi::getDefaultMonitor();
++    HMONITOR monitor = m_adapter->GetMonitor();
+ 
+     if (!wsi::setWindowMode(monitor, m_window, &m_windowState, wsiMode))
+       return D3DERR_NOTAVAILABLE;
+diff --git a/src/d3d9/d3d9_swapchain.h b/src/d3d9/d3d9_swapchain.h
+index 643eac04..aecc443b 100644
+--- a/src/d3d9/d3d9_swapchain.h
++++ b/src/d3d9/d3d9_swapchain.h
+@@ -70,7 +70,8 @@ namespace dxvk {
+             D3D9DeviceEx*          pDevice,
+             D3DPRESENT_PARAMETERS* pPresentParams,
+       const D3DDISPLAYMODEEX*      pFullscreenDisplayMode,
+-            bool                   EnableLatencyTracking);
++            bool                   EnableLatencyTracking,
++            D3D9Adapter*           pAdapter);
+ 
+     ~D3D9SwapChainEx();
+ 
+@@ -130,6 +131,8 @@ namespace dxvk {
+ 
+     const D3DPRESENT_PARAMETERS* GetPresentParams() const { return &m_presentParams; }
+ 
++    D3D9Adapter* GetAdapter() const { return m_adapter; }
++
+     void SyncFrameLatency();
+ 
+     void DestroyBackBuffers();
+@@ -169,6 +172,8 @@ namespace dxvk {
+     HWND                      m_window   = nullptr;
+     HMONITOR                  m_monitor  = nullptr;
+ 
++    D3D9Adapter*              m_adapter  = nullptr;
++
+     wsi::DxvkWindowState      m_windowState;
+ 
+     double                    m_targetFrameRate = 0.0;
+diff --git a/src/d3d9/d3d9_window.cpp b/src/d3d9/d3d9_window.cpp
+index 543da09f..77e71d44 100644
+--- a/src/d3d9/d3d9_window.cpp
++++ b/src/d3d9/d3d9_window.cpp
+@@ -70,7 +70,7 @@ namespace dxvk
+           D3DPRESENT_PARAMETERS params;
+           RECT rect;
+ 
+-          wsi::getDesktopCoordinates(wsi::getDefaultMonitor(), &rect);
++          wsi::getDesktopCoordinates(windowData.swapchain->GetAdapter()->GetMonitor(), &rect);
+           windowData.swapchain->GetPresentParameters(&params);
+           SetWindowPos(window, nullptr, rect.left, rect.top, params.BackBufferWidth, params.BackBufferHeight,
+                        SWP_NOACTIVATE | SWP_NOZORDER);
+-- 
+2.53.0
+

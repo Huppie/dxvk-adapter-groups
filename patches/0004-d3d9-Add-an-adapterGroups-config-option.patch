@@ -1,0 +1,233 @@
+From d75a3d64dd70928dd346b0f9217280bfb1e7288e Mon Sep 17 00:00:00 2001
+From: IJsbrand Slob <ijsbrand@mirast.com>
+Date: Tue, 3 Nov 2026 17:55:33 +0100
+Subject: [PATCH 4/5] [d3d9] Add an adapterGroups config option
+
+Reports displays on the same Vulkan device as one adapter group
+and maps each adapter to its own display.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ dxvk.conf                   | 13 +++++++++++++
+ src/d3d9/d3d9_adapter.cpp   | 36 +++++++++++++++++++++++++++++++++++-
+ src/d3d9/d3d9_adapter.h     |  6 +++++-
+ src/d3d9/d3d9_interface.cpp | 36 +++++++++++++++++++++++++++++++++---
+ src/d3d9/d3d9_options.cpp   |  1 +
+ src/d3d9/d3d9_options.h     |  3 +++
+ 6 files changed, 90 insertions(+), 5 deletions(-)
+
+diff --git a/dxvk.conf b/dxvk.conf
+index b403f62c..4acec319 100644
+--- a/dxvk.conf
++++ b/dxvk.conf
+@@ -802,6 +802,19 @@
+ # d3d9.enumerateByDisplays = True
+ 
+ 
++# Adapter Groups
++#
++# Reports displays that are mapped to the same Vulkan device as one
++# adapter group, with each adapter using its own display, and allows
++# creating multi-head devices with D3DCREATE_ADAPTERGROUP_DEVICE.
++# Has no effect if d3d9.enumerateByDisplays is disabled.
++#
++# Supported values:
++# - True/False
++
++# d3d9.adapterGroups = False
++
++
+ # Cached write-only Buffers
+ #
+ # Allocates write-only resources in D3DPOOL_DEFAULT in
+diff --git a/src/d3d9/d3d9_adapter.cpp b/src/d3d9/d3d9_adapter.cpp
+index a502b3eb..d231a21e 100644
+--- a/src/d3d9/d3d9_adapter.cpp
++++ b/src/d3d9/d3d9_adapter.cpp
+@@ -39,7 +39,8 @@ namespace dxvk {
+           Rc<DxvkInstance> Instance,
+           Rc<DxvkAdapter>  Adapter,
+           UINT             Ordinal,
+-          UINT             DisplayIndex)
++          UINT             DisplayIndex,
++    const char*            pDisplayName)
+   : m_parent          (pParent),
+     m_adapter         (Adapter),
+     m_caps            (*Instance, Adapter->handle(), nullptr),
+@@ -53,6 +54,9 @@ namespace dxvk {
+ 
+     if (p9On12Args)
+       m_9On12Args = *p9On12Args;
++
++    if (pDisplayName)
++      m_displayName = pDisplayName;
+   }
+ 
+ 
+@@ -724,6 +728,16 @@ namespace dxvk {
+     pCaps->AdapterOrdinalInGroup      = 0;
+     // Number of adapters in current group
+     pCaps->NumberOfAdaptersInGroup    = 1;
++
++    if (!m_adapterGroup.empty()) {
++      UINT ordinalInGroup = std::find(m_adapterGroup.begin(), m_adapterGroup.end(), this) - m_adapterGroup.begin();
++
++      pCaps->MasterAdapterOrdinal     = m_adapterGroup.front()->GetOrdinal();
++      pCaps->AdapterOrdinalInGroup    = ordinalInGroup;
++      // Subordinate adapters report 0
++      pCaps->NumberOfAdaptersInGroup  = ordinalInGroup ? 0 : m_adapterGroup.size();
++    }
++
+     // Decl Type Caps
+     pCaps->DeclTypes                  = D3DDTCAPS_UBYTE4
+                                       | D3DDTCAPS_UBYTE4N
+@@ -793,6 +807,26 @@ namespace dxvk {
+ 
+ 
+   HMONITOR D3D9Adapter::GetMonitor() {
++    if (m_displayName.empty())
++      return wsi::getDefaultMonitor();
++
++    for (uint32_t i = 0; ; i++) {
++      HMONITOR monitor = wsi::enumMonitors(i);
++
++      if (!monitor)
++        break;
++
++      WCHAR displayName[32] = { };
++
++      if (wsi::getDisplayName(monitor, displayName) && str::fromws(displayName) == m_displayName)
++        return monitor;
++    }
++
++    static bool s_errorShown = false;
++
++    if (!std::exchange(s_errorShown, true))
++      Logger::warn(str::format("D3D9Adapter::GetMonitor: No monitor found for ", m_displayName, ", using default monitor"));
++
+     return wsi::getDefaultMonitor();
+   }
+ 
+diff --git a/src/d3d9/d3d9_adapter.h b/src/d3d9/d3d9_adapter.h
+index 629d4c94..c8b9db8c 100644
+--- a/src/d3d9/d3d9_adapter.h
++++ b/src/d3d9/d3d9_adapter.h
+@@ -24,7 +24,8 @@ namespace dxvk {
+             Rc<DxvkInstance> Instance,
+             Rc<DxvkAdapter>  Adapter,
+             UINT             Ordinal,
+-            UINT             DisplayIndex);
++            UINT             DisplayIndex,
++      const char*            pDisplayName);
+ 
+     HRESULT GetAdapterIdentifier(
+             DWORD                   Flags,
+@@ -69,6 +70,8 @@ namespace dxvk {
+ 
+     const std::vector<D3D9Adapter*>& GetAdapterGroup() const { return m_adapterGroup; }
+ 
++    void SetAdapterGroup(std::vector<D3D9Adapter*>&& Group) { m_adapterGroup = std::move(Group); }
++
+     UINT GetAdapterModeCountEx(const D3DDISPLAYMODEFILTER* pFilter);
+ 
+     HRESULT EnumAdapterModesEx(
+@@ -159,6 +162,7 @@ namespace dxvk {
+ 
+     UINT                          m_ordinal;
+     UINT                          m_displayIndex;
++    std::string                   m_displayName;
+ 
+     std::vector<D3D9Adapter*>     m_adapterGroup;
+ 
+diff --git a/src/d3d9/d3d9_interface.cpp b/src/d3d9/d3d9_interface.cpp
+index dbd2e5b7..9297fa13 100644
+--- a/src/d3d9/d3d9_interface.cpp
++++ b/src/d3d9/d3d9_interface.cpp
+@@ -33,9 +33,25 @@ namespace dxvk {
+       DISPLAY_DEVICEA device = { };
+       device.cb = sizeof(device);
+ 
++      uint32_t primary = 0;
++
++      // D3DADAPTER_DEFAULT must be the primary display, so enumerate it first.
++      if (m_d3d9Options.adapterGroups) {
++        while (::EnumDisplayDevicesA(nullptr, primary, &device, 0)
++            && !(device.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE))
++          primary++;
++
++        if (!::EnumDisplayDevicesA(nullptr, primary, &device, 0))
++          primary = 0;
++      }
++
++      auto displayIndex = [primary] (uint32_t n) {
++        return n == 0 ? primary : (n <= primary ? n - 1 : n);
++      };
++
+       uint32_t adapterOrdinal = 0;
+       uint32_t i = 0;
+-      while (::EnumDisplayDevicesA(nullptr, i++, &device, 0)) {
++      while (::EnumDisplayDevicesA(nullptr, displayIndex(i++), &device, 0)) {
+         // If we aren't attached, skip over.
+         if (!(device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP))
+           continue;
+@@ -50,7 +66,21 @@ namespace dxvk {
+ 
+         if (adapter != nullptr) {
+           const auto* d3d9On12Args = Find9On12Args(adapter, pOverrideList, OverrideCount);
+-          m_adapters.emplace_back(new D3D9Adapter(this, d3d9On12Args, m_instance, adapter, adapterOrdinal++, i - 1));
++          m_adapters.emplace_back(new D3D9Adapter(this, d3d9On12Args, m_instance, adapter, adapterOrdinal++, displayIndex(i - 1),
++            m_d3d9Options.adapterGroups ? device.DeviceName : nullptr));
++        }
++      }
++
++      if (m_d3d9Options.adapterGroups) {
++        for (const auto& adapter : m_adapters) {
++          std::vector<D3D9Adapter*> group;
++
++          for (const auto& member : m_adapters) {
++            if (member->GetDXVKAdapter() == adapter->GetDXVKAdapter())
++              group.push_back(member.ptr());
++          }
++
++          adapter->SetAdapterGroup(std::move(group));
+         }
+       }
+     }
+@@ -62,7 +92,7 @@ namespace dxvk {
+ 
+       for (uint32_t i = 0; i < adapterCount; i++) {
+         const auto* d3d9On12Args = Find9On12Args(m_instance->enumAdapters(i), pOverrideList, OverrideCount);
+-        m_adapters.emplace_back(new D3D9Adapter(this, d3d9On12Args, m_instance, m_instance->enumAdapters(i), i, 0));
++        m_adapters.emplace_back(new D3D9Adapter(this, d3d9On12Args, m_instance, m_instance->enumAdapters(i), i, 0, nullptr));
+       }
+     }
+ 
+diff --git a/src/d3d9/d3d9_options.cpp b/src/d3d9/d3d9_options.cpp
+index e46864e2..77776c80 100644
+--- a/src/d3d9/d3d9_options.cpp
++++ b/src/d3d9/d3d9_options.cpp
+@@ -64,6 +64,7 @@ namespace dxvk {
+     this->modeCountCompatibility        = config.getOption<bool>        ("d3d9.modeCountCompatibility",        false);
+     this->allowDiscard                  = config.getOption<bool>        ("d3d9.allowDiscard",                  true);
+     this->enumerateByDisplays           = config.getOption<bool>        ("d3d9.enumerateByDisplays",           true);
++    this->adapterGroups                 = config.getOption<bool>        ("d3d9.adapterGroups",                 false);
+     this->cachedWriteOnlyBuffers        = config.getOption<bool>        ("d3d9.cachedWriteOnlyBuffers",        false);
+     this->deviceLocalConstantBuffers    = config.getOption<Tristate>    ("d3d9.deviceLocalConstantBuffers",    Tristate::Auto);
+     this->allowDirectBufferMapping      = config.getOption<bool>        ("d3d9.allowDirectBufferMapping",      true);
+diff --git a/src/d3d9/d3d9_options.h b/src/d3d9/d3d9_options.h
+index e69a39a6..afb13119 100644
+--- a/src/d3d9/d3d9_options.h
++++ b/src/d3d9/d3d9_options.h
+@@ -119,6 +119,9 @@ namespace dxvk {
+     /// Enumerate adapters by displays
+     bool enumerateByDisplays;
+ 
++    /// Report displays on the same Vulkan device as one adapter group
++    bool adapterGroups;
++
+     /// Cached dynamic buffers: Maps all buffers in cached memory.
+     bool cachedWriteOnlyBuffers;
+ 
+-- 
+2.53.0
+

@@ -1,0 +1,35 @@
+DXVK with adapter-group patches (UNOFFICIAL)
+============================================
+
+Unofficial DXVK build for Supreme Commander / Forged Alliance dual-screen under
+Wine/Proton. Not affiliated with DXVK or FAF; report problems at
+https://github.com/Huppie/dxvk-adapter-groups
+
+Install (faf-linux)
+-------------------
+Close the game, then:
+  cd ~/faf-linux/prefix/drive_c/windows/syswow64
+  cp d3d9.dll d3d9.dll.bak
+  cp /path/to/x32/d3d9.dll d3d9.dll
+
+Other Proton: replace files/lib/wine/dxvk/i386-windows/d3d9.dll in the Proton
+folder (back it up first).
+
+With an integrated GPU as well (most Ryzen machines), add to your DXVK config
+(faf-linux: ~/faf-linux/dxvk-local.conf):
+  dxvk.hideIntegratedGraphics = True
+
+Enable the second screen
+------------------------
+In-game: Options -> Video -> Secondary Adapter -> pick your second monitor's
+resolution, then restart the game. Changing some other options (anti-aliasing,
+for example) can reset Secondary Adapter to disabled; check it first if the
+second screen goes dark.
+
+Roll back
+---------
+  cp ~/faf-linux/prefix/drive_c/windows/syswow64/d3d9.dll.bak \
+     ~/faf-linux/prefix/drive_c/windows/syswow64/d3d9.dll
+
+Source: upstream DXVK (https://github.com/doitsujin/dxvk, zlib license, see
+DXVK-LICENSE) plus the patches in patches/.
