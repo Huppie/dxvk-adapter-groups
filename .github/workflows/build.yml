@@ -12,9 +12,8 @@ on:
     paths:
       - 'patches/**'
       - 'dist/**'
-      - '.github/workflows/build.yml'
-  schedule:
-    - cron: '17 4 * * 1'
+      - '.github/workflows/*.yml'
+  # schedule: [{cron: '17 4 * * 1'}]  (paused until a DXVK release the patches apply to)
 
 permissions:
   contents: write
@@ -24,158 +23,55 @@ concurrency:
   group: build
   cancel-in-progress: false
 
-env:
-  UPSTREAM: doitsujin/dxvk
-
 jobs:
-  resolve:
+  targets:
     runs-on: ubuntu-latest
     outputs:
-      sha: ${{ steps.r.outputs.sha }}
-      ref: ${{ steps.r.outputs.ref }}
-      version: ${{ steps.r.outputs.version }}
-      tag: ${{ steps.r.outputs.tag }}
-      patchset: ${{ steps.r.outputs.patchset }}
-      skip: ${{ steps.r.outputs.skip }}
+      refs: ${{ steps.t.outputs.refs }}
     steps:
       - uses: actions/checkout@v4
-      - id: r
+        with:
+          fetch-depth: 0
+      - id: t
         env:
-          GH_TOKEN: ${{ github.token }}
           INPUT_REF: ${{ inputs.dxvk_ref }}
+          BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          ref="${INPUT_REF:-$(gh release view -R "$UPSTREAM" --json tagName -q .tagName)}"
-          url="https://github.com/$UPSTREAM"
-
-          if git ls-remote --exit-code "$url" "refs/tags/$ref" >/dev/null; then
-            sha=$(gh api "repos/$UPSTREAM/commits/$ref" -q .sha)
-            version="${ref#v}"; base="$ref"
-          elif [[ "$ref" =~ ^[0-9a-f]{7,40}$ ]]; then
-            sha=$(gh api "repos/$UPSTREAM/commits/$ref" -q .sha)
-            status=$(gh api "repos/$UPSTREAM/compare/master...$sha" -q .status)
-            [[ "$status" =~ ^(behind|identical)$ ]] && branch=master || branch=git
-            version="$branch-${sha:0:8}"; base="$version"
-          elif branch_sha=$(git ls-remote --exit-code "$url" "refs/heads/$ref" | cut -f1); then
-            sha="$branch_sha"; version="$ref-${sha:0:8}"; base="$version"
+          # On push, build each patch set the push changed (all of them if none or unknown);
+          # patches/master builds DXVK master, patches/<ref> builds <ref>.
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            all=$(find patches -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+            changed=""
+            if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+              changed=$(git diff --name-only "$BEFORE" "$GITHUB_SHA" -- patches |
+                cut -d/ -f2 | sort -u | grep -Fxf <(echo "$all") || true)
+            fi
+            refs=$(jq -cRn '[inputs | select(length > 0)]' <<<"${changed:-$all}")
           else
-            echo "::error::Unknown DXVK ref: $ref"; exit 1
+            refs=$(jq -cn --arg r "$INPUT_REF" '[$r]')
           fi
-
-          patchset=$(cat patches/*.patch | sha256sum | cut -c1-12)
-          releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
-            -q ".[] | select(.tag_name | startswith(\"$base-adaptergroups.\")) | [.tag_name, .body] | @json")
-          n=$(jq -rs '[.[] | fromjson | .[0] | sub(".*\\."; "") | tonumber] | max // 0' <<<"$releases")
-          skip=false
-          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch ]] &&
-             jq -es --arg p "Patch set: \`$patchset\`" 'any(.[] | fromjson | .[1]; contains($p))' <<<"$releases" >/dev/null; then
-            skip=true
-          fi
-
-          tag="$base-adaptergroups.$((n + 1))"
-          echo "ref=$ref sha=$sha version=$version tag=$tag patchset=$patchset skip=$skip"
-          { echo "ref=$ref"; echo "sha=$sha"; echo "version=$version"; echo "tag=$tag"
-            echo "patchset=$patchset"; echo "skip=$skip"; } >> "$GITHUB_OUTPUT"
+          echo "refs=$refs"
+          echo "refs=$refs" >> "$GITHUB_OUTPUT"
 
   build:
-    needs: resolve
-    if: needs.resolve.outputs.skip != 'true'
-    runs-on: ubuntu-latest
-    container: debian:13.1
-    env:
-      PKG: dxvk-${{ needs.resolve.outputs.version }}-adaptergroups
-    steps:
-      - name: Install toolchain
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            g++-mingw-w64-i686-posix gcc-mingw-w64-i686-posix binutils-mingw-w64-i686 \
-            meson ninja-build glslang-tools git ca-certificates zip
-          update-alternatives --set i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-gcc-posix
-          update-alternatives --set i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-posix
-
-      - uses: actions/checkout@v4
-        with:
-          path: repo
-
-      - name: Fetch DXVK and apply patches
-        run: |
-          git clone --filter=blob:none "https://github.com/$UPSTREAM.git" dxvk
-          cd dxvk
-          git checkout --detach "${{ needs.resolve.outputs.sha }}"
-          git submodule update --init --recursive --depth 1
-          git -c user.name="dxvk-adapter-groups CI" -c user.email="ci@invalid" \
-            am "$GITHUB_WORKSPACE"/repo/patches/*.patch
-
-      - name: Build
-        working-directory: dxvk
-        run: |
-          meson setup --cross-file build-win32.txt --buildtype release \
-            --prefix "$GITHUB_WORKSPACE/out/$PKG" --strip --bindir x32 --libdir x32 \
-            -Db_ndebug=if-release build.w32
-          ninja -C build.w32 install
-
-      - name: Package
-        run: |
-          out="$GITHUB_WORKSPACE/out"
-          find "$out/$PKG/x32" -type f ! -name '*.dll' -delete
-          cp -r repo/patches "$out/$PKG/"
-          cp repo/dist/instructions.txt "$out/$PKG/"
-          cp dxvk/LICENSE "$out/$PKG/DXVK-LICENSE"
-          cd "$out"
-          tar -czf "$PKG.tar.gz" "$PKG"
-          zip -qr "$PKG.zip" "$PKG"
-          cp "$PKG/x32/d3d9.dll" d3d9.dll
-          sha256sum d3d9.dll "$PKG.tar.gz" "$PKG.zip" > SHA256SUMS
-          cat SHA256SUMS
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release
-          path: |
-            out/*.tar.gz
-            out/*.zip
-            out/d3d9.dll
-            out/SHA256SUMS
-
-  release:
-    needs: [resolve, build]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: release
-          path: out
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.resolve.outputs.tag }}
-          REF: ${{ needs.resolve.outputs.ref }}
-          SHA: ${{ needs.resolve.outputs.sha }}
-          PATCHSET: ${{ needs.resolve.outputs.patchset }}
-        run: |
-          {
-            echo "Unofficial DXVK build: upstream \`$REF\` (doitsujin/dxvk@$SHA) plus the adapter-group patches."
-            echo "Not affiliated with DXVK or FAF. Report problems in this repository."
-            echo
-            echo "Patches:"
-            sed -n 's/^Subject: \[PATCH [0-9]*\/[0-9]*\] /- /p' patches/*.patch
-            echo
-            echo "Install: replace your 32-bit \`d3d9.dll\` with the one attached; see the [README](https://github.com/$GITHUB_REPOSITORY#readme)."
-            echo
-            echo "Patch set: \`$PATCHSET\`"
-          } > notes.md
-          gh release create "$TAG" out/* --title "$TAG" --notes-file notes.md --target "$GITHUB_SHA"
+    needs: targets
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: ${{ fromJSON(needs.targets.outputs.refs) }}
+    uses: ./.github/workflows/build-ref.yml
+    with:
+      dxvk_ref: ${{ matrix.ref }}
 
   report-failure:
-    needs: [resolve, build, release]
+    needs: [targets, build]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
       - env:
           GH_TOKEN: ${{ github.token }}
-          TITLE: Scheduled build failed for DXVK ${{ needs.resolve.outputs.ref || 'latest release' }}
+          TITLE: Scheduled build failed for DXVK's latest release
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           existing=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$TITLE\"" --json title \

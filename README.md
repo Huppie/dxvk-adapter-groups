@@ -4,7 +4,14 @@
 for Supreme Commander and Forged Alliance players on Linux. Not affiliated with DXVK or FAF.
 Report problems here, not to DXVK or FAF.
 
-Download the latest build from [Releases](../../releases).
+Download a build from [Releases](../../releases). There are two kinds:
+
+- **`v2.7.1-adaptergroups.N`**: DXVK 2.7.1, the version faf-linux ships, plus the patches.
+  Recommended for faf-linux: only `d3d9.dll` differs from what you already run.
+- **`master-<sha8>-adaptergroups.N`**: newer upstream DXVK master (commit `<sha8>`) plus the
+  patches. Use it only with a newer DXVK, for example in a recent Proton.
+
+Take the highest `N` of the kind you need.
 
 ## What it fixes
 
@@ -63,13 +70,20 @@ Open an issue with:
 
 ## Source and builds
 
-The patches are in [`patches/`](patches); their development branch is
-[Huppie/dxvk `adapter-groups-master`](https://github.com/Huppie/dxvk/tree/adapter-groups-master).
-[`build.yml`](.github/workflows/build.yml) applies them to upstream DXVK and builds the
+There is one patch series per DXVK base: [`patches/master/`](patches/master) targets upstream
+master, [`patches/v2.7.1/`](patches/v2.7.1) is the backport to DXVK 2.7.1. The development
+branch is [Huppie/dxvk `adapter-groups-master`](https://github.com/Huppie/dxvk/tree/adapter-groups-master).
+[`build.yml`](.github/workflows/build.yml) applies a series to upstream DXVK and builds the
 32-bit DLLs on Debian 13.1 with mingw-w64 (posix threads), with the same options as upstream's
-`package-release.sh`. It runs weekly against the latest DXVK release and opens an issue
-when the patches stop applying. To build another upstream tag, branch or commit, run the
-workflow manually with `dxvk_ref`.
+`package-release.sh`. A build of ref `X` uses `patches/X/` if it exists, else `patches/master/`.
+
+- **Push to `main`**: builds each patch set the push changed (`patches/master/` builds DXVK
+  master, `patches/v2.7.1/` builds v2.7.1). Pushes that touch no patches build every set;
+  sets already released with identical patches are skipped.
+- **Manual run**: run the workflow with `dxvk_ref` (tag, branch or commit; empty = latest
+  DXVK release), for example `gh workflow run build -f dxvk_ref=v2.7.1`.
+- **Weekly run**: paused until a DXVK release the patches apply to; re-enable the `schedule:`
+  line in `build.yml`.
 
 ## License
 
