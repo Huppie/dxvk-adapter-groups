@@ -50,21 +50,21 @@ jobs:
 
           if git ls-remote --exit-code "$url" "refs/tags/$ref" >/dev/null; then
             sha=$(gh api "repos/$UPSTREAM/commits/$ref" -q .sha)
-            version="${ref#v}"
+            version="${ref#v}"; base="$ref"
           elif [[ "$ref" =~ ^[0-9a-f]{7,40}$ ]]; then
             sha=$(gh api "repos/$UPSTREAM/commits/$ref" -q .sha)
             status=$(gh api "repos/$UPSTREAM/compare/master...$sha" -q .status)
             [[ "$status" =~ ^(behind|identical)$ ]] && branch=master || branch=git
-            version="$branch-${sha:0:8}"
+            version="$branch-${sha:0:8}"; base="$version"
           elif branch_sha=$(git ls-remote --exit-code "$url" "refs/heads/$ref" | cut -f1); then
-            sha="$branch_sha"; version="$ref-${sha:0:8}"
+            sha="$branch_sha"; version="$ref-${sha:0:8}"; base="$version"
           else
             echo "::error::Unknown DXVK ref: $ref"; exit 1
           fi
 
           patchset=$(cat patches/*.patch | sha256sum | cut -c1-12)
           releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
-            -q ".[] | select(.tag_name | startswith(\"$version-adaptergroups.\")) | [.tag_name, .body] | @json")
+            -q ".[] | select(.tag_name | startswith(\"$base-adaptergroups.\")) | [.tag_name, .body] | @json")
           n=$(jq -rs '[.[] | fromjson | .[0] | sub(".*\\."; "") | tonumber] | max // 0' <<<"$releases")
           skip=false
           if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch ]] &&
@@ -72,7 +72,7 @@ jobs:
             skip=true
           fi
 
-          tag="$version-adaptergroups.$((n + 1))"
+          tag="$base-adaptergroups.$((n + 1))"
           echo "ref=$ref sha=$sha version=$version tag=$tag patchset=$patchset skip=$skip"
           { echo "ref=$ref"; echo "sha=$sha"; echo "version=$version"; echo "tag=$tag"
             echo "patchset=$patchset"; echo "skip=$skip"; } >> "$GITHUB_OUTPUT"
