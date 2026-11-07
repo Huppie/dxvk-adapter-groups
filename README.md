@@ -57,6 +57,19 @@ then restart the game.
   can make the game save Secondary Adapter as disabled again. If the second screen stops
   showing the game, check that setting first.
 
+## Three or more screens, Wayland
+
+- **Three or more screens**: the game only handles two heads, so `d3d9.adapterGroupMaxHeads` keeps
+  the group to two. The game gets the primary display and the next one Wine lists.
+- **Wine virtual desktop**: turn it off in faf-linux's prefix. It hides the second screen from the game.
+- **No primary display**: XWayland may report none. Wine then picks the first display, and device
+  creation can fail. Set one before starting the game: `xrandr --output <main> --primary`.
+- **Hyprland**: both game windows open on the focused monitor, with the same class and title, so a
+  window rule can't place them. The main window has the lower `stableId` in `hyprctl clients -j`, so
+  a small script can move the other one to the second monitor.
+- **Falling back to one screen at 1024x768**: run the game with `/log <file>` and look for
+  `unable to create device`. The DXVK log doesn't show this failure.
+
 ## Reporting problems
 
 Open an issue with:

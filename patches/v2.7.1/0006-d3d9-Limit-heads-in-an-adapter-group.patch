@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erwin <72449986+erwingies@users.noreply.github.com>
+Date: Sat, 7 Nov 2026 16:38:00 +0100
+Subject: [PATCH] [d3d9] Limit the number of heads in an adapter group
+
+Supreme Commander allocates D3DPRESENT_PARAMETERS for two heads, whatever
+NumberOfAdaptersInGroup reports. With three displays on one GPU, validating
+a third head reads past the end of that allocation and device creation fails,
+so the game falls back to a single 1024x768 head.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ dxvk.conf                   | 12 ++++++++++++
+ src/d3d9/d3d9_interface.cpp | 16 ++++++++++++++--
+ src/d3d9/d3d9_options.cpp   |  1 +
+ src/d3d9/d3d9_options.h     |  3 +++
+ src/util/config/config.cpp  |  1 +
+ 5 files changed, 31 insertions(+), 2 deletions(-)
+
+diff --git a/dxvk.conf b/dxvk.conf
+index 7137a7f2..28634627 100644
+--- a/dxvk.conf
++++ b/dxvk.conf
+@@ -752,6 +752,18 @@
+ 
+ # d3d9.adapterGroups = False
+ 
++# Adapter Group Size Limit
++#
++# Limits how many displays join one adapter group, for games that create
++# adapter group devices with a fixed number of heads. Displays past the
++# limit form a group of their own. Has no effect if d3d9.adapterGroups
++# is disabled.
++#
++# Supported values:
++# - 0 for no limit, or the maximum number of heads
++
++# d3d9.adapterGroupMaxHeads = 0
++
+ # Cached Dynamic Buffers
+ #
+ # Allocates dynamic resources in D3DPOOL_DEFAULT in
+diff --git a/src/d3d9/d3d9_interface.cpp b/src/d3d9/d3d9_interface.cpp
+index 7435d68c..79e912c1 100644
+--- a/src/d3d9/d3d9_interface.cpp
++++ b/src/d3d9/d3d9_interface.cpp
+@@ -71,15 +71,27 @@ namespace dxvk {
+       }
+ 
+       if (m_d3d9Options.adapterGroups) {
++        const size_t maxHeads = m_d3d9Options.adapterGroupMaxHeads > 0
++          ? size_t(m_d3d9Options.adapterGroupMaxHeads)
++          : m_adapters.size();
++
+         for (auto& adapter : m_adapters) {
++          if (!adapter.GetAdapterGroup().empty())
++            continue;
++
++          // Adapters past the limit form a group of their own, so that
++          // the adapter with the lowest ordinal stays the master of each.
+           std::vector<D3D9Adapter*> group;
+ 
+           for (auto& member : m_adapters) {
+-            if (member.GetDXVKAdapter() == adapter.GetDXVKAdapter())
++            if (group.size() < maxHeads
++             && member.GetAdapterGroup().empty()
++             && member.GetDXVKAdapter() == adapter.GetDXVKAdapter())
+               group.push_back(&member);
+           }
+ 
+-          adapter.SetAdapterGroup(std::move(group));
++          for (auto* member : group)
++            member->SetAdapterGroup(std::vector<D3D9Adapter*>(group));
+         }
+       }
+     }
+diff --git a/src/d3d9/d3d9_options.cpp b/src/d3d9/d3d9_options.cpp
+index 2db58d12..3c22ca64 100644
+--- a/src/d3d9/d3d9_options.cpp
++++ b/src/d3d9/d3d9_options.cpp
+@@ -66,6 +66,7 @@ namespace dxvk {
+     this->allowDiscard                  = config.getOption<bool>        ("d3d9.allowDiscard",                  true);
+     this->enumerateByDisplays           = config.getOption<bool>        ("d3d9.enumerateByDisplays",           true);
+     this->adapterGroups                 = config.getOption<bool>        ("d3d9.adapterGroups",                 false);
++    this->adapterGroupMaxHeads          = config.getOption<int32_t>     ("d3d9.adapterGroupMaxHeads",          0);
+     this->cachedDynamicBuffers          = config.getOption<bool>        ("d3d9.cachedDynamicBuffers",          false);
+     this->deviceLocalConstantBuffers    = config.getOption<bool>        ("d3d9.deviceLocalConstantBuffers",    false);
+     this->allowDirectBufferMapping      = config.getOption<bool>        ("d3d9.allowDirectBufferMapping",      true);
+diff --git a/src/d3d9/d3d9_options.h b/src/d3d9/d3d9_options.h
+index 984cebd8..e1f5fc8c 100644
+--- a/src/d3d9/d3d9_options.h
++++ b/src/d3d9/d3d9_options.h
+@@ -128,6 +128,9 @@ namespace dxvk {
+     /// Report displays on the same Vulkan device as one adapter group
+     bool adapterGroups;
+ 
++    /// Maximum number of adapters in one adapter group, 0 means no limit
++    int32_t adapterGroupMaxHeads;
++
+     /// Cached dynamic buffers: Maps all buffers in cached memory.
+     bool cachedDynamicBuffers;
+ 
+diff --git a/src/util/config/config.cpp b/src/util/config/config.cpp
+index 0efb0e72..c8ba39d6 100644
+--- a/src/util/config/config.cpp
++++ b/src/util/config/config.cpp
+@@ -740,6 +740,7 @@ namespace dxvk {
+     { R"(\\(SupremeCommander|ForgedAlliance)\.exe$)", {{
+       { "d3d9.floatEmulation",            "Strict" },
+       { "d3d9.adapterGroups",               "True" },
++      { "d3d9.adapterGroupMaxHeads",        "2" },
+     }} },
+     /* Bionic Commando                            *
+      * Physics break at high fps                  */
+-- 
+2.56.0
+
