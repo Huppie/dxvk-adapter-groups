@@ -1,4 +1,4 @@
-From bee00c0d193b159900aa6667a519765bbcd6a7ff Mon Sep 17 00:00:00 2001
+From 74a885a52967ee0f805fca578b3824fd370813ad Mon Sep 17 00:00:00 2001
 From: IJsbrand Slob <ijsbrand@mirast.com>
 Date: Tue, 3 Nov 2026 17:55:16 +0100
 Subject: [PATCH 3/5] [d3d9] Implement adapter group devices
@@ -9,11 +9,11 @@ Inactive until adapters report an adapter group.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  src/d3d9/d3d9_adapter.h     |   4 ++
- src/d3d9/d3d9_device.cpp    | 124 ++++++++++++++++++++++++++++++------
+ src/d3d9/d3d9_device.cpp    | 140 ++++++++++++++++++++++++++++++------
  src/d3d9/d3d9_device.h      |   5 ++
- src/d3d9/d3d9_interface.cpp |  67 +++++++++++++++++++
+ src/d3d9/d3d9_interface.cpp |  67 +++++++++++++++++
  src/d3d9/d3d9_interface.h   |   5 ++
- 5 files changed, 184 insertions(+), 21 deletions(-)
+ 5 files changed, 198 insertions(+), 23 deletions(-)
 
 diff --git a/src/d3d9/d3d9_adapter.h b/src/d3d9/d3d9_adapter.h
 index af8f2706..629d4c94 100644
@@ -38,35 +38,39 @@ index af8f2706..629d4c94 100644
      uint32_t                      m_vendorId;
      uint32_t                      m_deviceId;
 diff --git a/src/d3d9/d3d9_device.cpp b/src/d3d9/d3d9_device.cpp
-index 846a8f07..1343aef5 100644
+index f8227cb2..726f6996 100644
 --- a/src/d3d9/d3d9_device.cpp
 +++ b/src/d3d9/d3d9_device.cpp
-@@ -285,10 +285,10 @@ namespace dxvk {
+@@ -285,10 +285,12 @@ namespace dxvk {
  
  
    HRESULT STDMETHODCALLTYPE D3D9DeviceEx::GetDisplayMode(UINT iSwapChain, D3DDISPLAYMODE* pMode) {
 -    if (unlikely(iSwapChain != 0))
-+    if (unlikely(iSwapChain > m_groupHeads.size()))
++    D3D9SwapChainEx* swapchain = GetHeadSwapChain(iSwapChain);
++
++    if (unlikely(swapchain == nullptr))
        return D3DERR_INVALIDCALL;
  
 -    return m_implicitSwapchain->GetDisplayMode(pMode);
-+    return GetHeadSwapChain(iSwapChain)->GetDisplayMode(pMode);
++    return swapchain->GetDisplayMode(pMode);
    }
  
  
-@@ -434,21 +434,21 @@ namespace dxvk {
+@@ -434,21 +436,23 @@ namespace dxvk {
      if (unlikely(pSwapChain == nullptr))
        return D3DERR_INVALIDCALL;
  
 -    // This only returns the implicit swapchain...
 +    // This only returns the implicit head swapchains...
++
++    D3D9SwapChainEx* swapchain = GetHeadSwapChain(iSwapChain);
  
 -    if (unlikely(iSwapChain != 0))
-+    if (unlikely(iSwapChain > m_groupHeads.size()))
++    if (unlikely(swapchain == nullptr))
        return D3DERR_INVALIDCALL;
  
 -    *pSwapChain = static_cast<IDirect3DSwapChain9*>(m_implicitSwapchain.ref());
-+    *pSwapChain = ref(GetHeadSwapChain(iSwapChain));
++    *pSwapChain = ref(swapchain);
  
      return D3D_OK;
    }
@@ -81,7 +85,7 @@ index 846a8f07..1343aef5 100644
    }
  
  
-@@ -461,6 +461,8 @@ namespace dxvk {
+@@ -461,6 +465,8 @@ namespace dxvk {
        // The internal references are always cleared, regardless of whether the Reset call succeeds.
        ResetState(pPresentationParameters);
        m_implicitSwapchain->DestroyBackBuffers();
@@ -90,7 +94,7 @@ index 846a8f07..1343aef5 100644
        m_autoDepthStencil = nullptr;
  
        // Unbind all buffers that were still bound to the backend to avoid leaks.
-@@ -500,6 +502,10 @@ namespace dxvk {
+@@ -500,6 +506,10 @@ namespace dxvk {
      // expects reset to work despite passing invalid parameters.
      if (likely(m_deviceType != D3DDEVTYPE_NULLREF)) {
        hr = m_parent->ValidatePresentationParameters(pPresentationParameters);
@@ -101,82 +105,97 @@ index 846a8f07..1343aef5 100644
        if (unlikely(FAILED(hr))) {
          if (!isExtended)
            m_deviceLostState = D3D9DeviceLostState::NotReset;
-@@ -563,18 +569,18 @@ namespace dxvk {
+@@ -563,18 +573,22 @@ namespace dxvk {
            IDirect3DSurface9** ppBackBuffer) {
      InitReturnPtr(ppBackBuffer);
  
 -    if (unlikely(iSwapChain != 0))
-+    if (unlikely(iSwapChain > m_groupHeads.size()))
++    D3D9SwapChainEx* swapchain = GetHeadSwapChain(iSwapChain);
++
++    if (unlikely(swapchain == nullptr))
        return D3DERR_INVALIDCALL;
  
 -    return m_implicitSwapchain->GetBackBuffer(iBackBuffer, Type, ppBackBuffer);
-+    return GetHeadSwapChain(iSwapChain)->GetBackBuffer(iBackBuffer, Type, ppBackBuffer);
++    return swapchain->GetBackBuffer(iBackBuffer, Type, ppBackBuffer);
    }
  
  
    HRESULT STDMETHODCALLTYPE D3D9DeviceEx::GetRasterStatus(UINT iSwapChain, D3DRASTER_STATUS* pRasterStatus) {
 -    if (unlikely(iSwapChain != 0))
-+    if (unlikely(iSwapChain > m_groupHeads.size()))
++    D3D9SwapChainEx* swapchain = GetHeadSwapChain(iSwapChain);
++
++    if (unlikely(swapchain == nullptr))
        return D3DERR_INVALIDCALL;
  
 -    return m_implicitSwapchain->GetRasterStatus(pRasterStatus);
-+    return GetHeadSwapChain(iSwapChain)->GetRasterStatus(pRasterStatus);
++    return swapchain->GetRasterStatus(pRasterStatus);
    }
  
  
-@@ -587,18 +593,18 @@ namespace dxvk {
+@@ -587,18 +601,22 @@ namespace dxvk {
            UINT          iSwapChain,
            DWORD         Flags,
      const D3DGAMMARAMP* pRamp) {
 -    if (unlikely(iSwapChain != 0))
-+    if (unlikely(iSwapChain > m_groupHeads.size()))
++    D3D9SwapChainEx* swapchain = GetHeadSwapChain(iSwapChain);
++
++    if (unlikely(swapchain == nullptr))
        return;
  
 -    m_implicitSwapchain->SetGammaRamp(Flags, pRamp);
-+    GetHeadSwapChain(iSwapChain)->SetGammaRamp(Flags, pRamp);
++    swapchain->SetGammaRamp(Flags, pRamp);
    }
  
  
    void    STDMETHODCALLTYPE D3D9DeviceEx::GetGammaRamp(UINT iSwapChain, D3DGAMMARAMP* pRamp) {
 -    if (unlikely(iSwapChain != 0))
-+    if (unlikely(iSwapChain > m_groupHeads.size()))
++    D3D9SwapChainEx* swapchain = GetHeadSwapChain(iSwapChain);
++
++    if (unlikely(swapchain == nullptr))
        return;
  
 -    m_implicitSwapchain->GetGammaRamp(pRamp);
-+    GetHeadSwapChain(iSwapChain)->GetGammaRamp(pRamp);
++    swapchain->GetGammaRamp(pRamp);
    }
  
  
-@@ -1207,11 +1213,14 @@ namespace dxvk {
+@@ -1207,11 +1225,17 @@ namespace dxvk {
  
  
    HRESULT STDMETHODCALLTYPE D3D9DeviceEx::GetFrontBufferData(UINT iSwapChain, IDirect3DSurface9* pDestSurface) {
 -    if (unlikely(iSwapChain != 0))
-+    if (unlikely(iSwapChain > m_groupHeads.size()))
-       return D3DERR_INVALIDCALL;
- 
+-      return D3DERR_INVALIDCALL;
+-
      D3D9DeviceLock lock = LockDevice();
  
-+    if (unlikely(iSwapChain != 0))
-+      return GetHeadSwapChain(iSwapChain)->GetFrontBufferData(pDestSurface);
++    if (unlikely(iSwapChain != 0)) {
++      D3D9SwapChainEx* swapchain = GetHeadSwapChain(iSwapChain);
++
++      if (unlikely(swapchain == nullptr))
++        return D3DERR_INVALIDCALL;
++
++      return swapchain->GetFrontBufferData(pDestSurface);
++    }
 +
      // In windowed mode, GetFrontBufferData takes a screenshot of the entire screen.
      // We use the last used swapchain as a workaround.
      // Total War: Medieval 2 relies on this.
-@@ -4172,10 +4181,10 @@ namespace dxvk {
+@@ -4172,10 +4196,12 @@ namespace dxvk {
  
  
    HRESULT STDMETHODCALLTYPE D3D9DeviceEx::WaitForVBlank(UINT iSwapChain) {
 -    if (unlikely(iSwapChain != 0))
-+    if (unlikely(iSwapChain > m_groupHeads.size()))
++    D3D9SwapChainEx* swapchain = GetHeadSwapChain(iSwapChain);
++
++    if (unlikely(swapchain == nullptr))
        return D3DERR_INVALIDCALL;
  
 -    return m_implicitSwapchain->WaitForVBlank();
-+    return GetHeadSwapChain(iSwapChain)->WaitForVBlank();
++    return swapchain->WaitForVBlank();
    }
  
  
-@@ -4260,12 +4269,24 @@ namespace dxvk {
+@@ -4260,12 +4286,24 @@ namespace dxvk {
        }
      }
  
@@ -202,7 +221,7 @@ index 846a8f07..1343aef5 100644
    }
  
  
-@@ -4470,6 +4491,10 @@ namespace dxvk {
+@@ -4470,6 +4508,10 @@ namespace dxvk {
      HRESULT hr;
      if (likely(m_deviceType != D3DDEVTYPE_NULLREF)) {
        hr = m_parent->ValidatePresentationParametersEx(pPresentationParameters, pFullscreenDisplayMode);
@@ -213,20 +232,22 @@ index 846a8f07..1343aef5 100644
        if (unlikely(FAILED(hr)))
          return hr;
      }
-@@ -4486,10 +4511,10 @@ namespace dxvk {
+@@ -4486,10 +4528,12 @@ namespace dxvk {
            UINT                iSwapChain,
            D3DDISPLAYMODEEX*   pMode,
            D3DDISPLAYROTATION* pRotation) {
 -    if (unlikely(iSwapChain != 0))
-+    if (unlikely(iSwapChain > m_groupHeads.size()))
++    D3D9SwapChainEx* swapchain = GetHeadSwapChain(iSwapChain);
++
++    if (unlikely(swapchain == nullptr))
        return D3DERR_INVALIDCALL;
  
 -    return m_implicitSwapchain->GetDisplayModeEx(pMode, pRotation);
-+    return GetHeadSwapChain(iSwapChain)->GetDisplayModeEx(pMode, pRotation);
++    return swapchain->GetDisplayModeEx(pMode, pRotation);
    }
  
  
-@@ -8881,6 +8906,35 @@ namespace dxvk {
+@@ -8863,6 +8907,25 @@ namespace dxvk {
        }
      }
  
@@ -247,22 +268,12 @@ index 846a8f07..1343aef5 100644
 +
 +      if (headFmt != D3D9Format::Unknown && !unlockedFormats && !IsSupportedBackBufferFormat(headFmt))
 +        return D3DERR_INVALIDCALL;
-+
-+      HMONITOR monitor = adapterGroup[i]->GetMonitor();
-+
-+      for (uint32_t j = 0; j < i; j++) {
-+        if (unlikely(adapterGroup[j]->GetMonitor() == monitor)) {
-+          Logger::err(str::format("D3D9DeviceEx::ResetSwapChain: Adapters ", adapterGroup[j]->GetOrdinal(),
-+            " and ", adapterGroup[i]->GetOrdinal(), " resolve to the same monitor"));
-+          return D3DERR_NOTAVAILABLE;
-+        }
-+      }
 +    }
 +
      if (m_implicitSwapchain != nullptr) {
        HRESULT hr = m_implicitSwapchain->Reset(pPresentationParameters, pFullscreenDisplayMode);
        if (FAILED(hr))
-@@ -8936,10 +8990,38 @@ namespace dxvk {
+@@ -8918,10 +8981,41 @@ namespace dxvk {
      // Force this if we end up binding the same RT to make scissor change go into effect.
      BindViewportAndScissor();
  
@@ -277,7 +288,7 @@ index 846a8f07..1343aef5 100644
 +        if (FAILED(hr))
 +          return hr;
 +      } else {
-+        m_groupHeads.emplace_back(new D3D9SwapChainEx(this, headParams, headMode, false, adapterGroup[i]));
++        m_groupHeads.emplace_back(new D3D9SwapChainEx(this, headParams, headMode, adapterGroup[i]));
 +      }
 +    }
 +
@@ -286,6 +297,9 @@ index 846a8f07..1343aef5 100644
  
  
 +  D3D9SwapChainEx* D3D9DeviceEx::GetHeadSwapChain(UINT iSwapChain) const {
++    if (unlikely(iSwapChain > m_groupHeads.size()))
++      return nullptr;
++
 +    return iSwapChain ? m_groupHeads[iSwapChain - 1].ptr() : m_implicitSwapchain.ptr();
 +  }
 +
@@ -302,10 +316,10 @@ index 846a8f07..1343aef5 100644
      ResetState(pPresentationParameters);
  
 diff --git a/src/d3d9/d3d9_device.h b/src/d3d9/d3d9_device.h
-index ec67d06f..3e346a6d 100644
+index cac0c06a..052eeff6 100644
 --- a/src/d3d9/d3d9_device.h
 +++ b/src/d3d9/d3d9_device.h
-@@ -1100,6 +1100,10 @@ namespace dxvk {
+@@ -1099,6 +1099,10 @@ namespace dxvk {
  
      HRESULT InitialReset(D3DPRESENT_PARAMETERS* pPresentationParameters, D3DDISPLAYMODEEX* pFullscreenDisplayMode);
  
@@ -316,7 +330,7 @@ index ec67d06f..3e346a6d 100644
      /**
       * \brief Returns the allocator used for unmappable system memory texture data
       */
-@@ -1603,6 +1607,7 @@ namespace dxvk {
+@@ -1602,6 +1606,7 @@ namespace dxvk {
      Com<D3D9Surface, false>         m_autoDepthStencil;
  
      Com<D3D9SwapChainEx, false>     m_implicitSwapchain;

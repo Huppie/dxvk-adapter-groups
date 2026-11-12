@@ -1,4 +1,4 @@
-From d75a3d64dd70928dd346b0f9217280bfb1e7288e Mon Sep 17 00:00:00 2001
+From 2b02d1d51646a650c94ff79c3f229335527e12d6 Mon Sep 17 00:00:00 2001
 From: IJsbrand Slob <ijsbrand@mirast.com>
 Date: Tue, 3 Nov 2026 17:55:33 +0100
 Subject: [PATCH 4/5] [d3d9] Add an adapterGroups config option
@@ -17,10 +17,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  6 files changed, 90 insertions(+), 5 deletions(-)
 
 diff --git a/dxvk.conf b/dxvk.conf
-index b403f62c..4acec319 100644
+index d3b27f30..1f887e77 100644
 --- a/dxvk.conf
 +++ b/dxvk.conf
-@@ -802,6 +802,19 @@
+@@ -771,6 +771,19 @@
  # d3d9.enumerateByDisplays = True
  
  
@@ -41,7 +41,7 @@ index b403f62c..4acec319 100644
  #
  # Allocates write-only resources in D3DPOOL_DEFAULT in
 diff --git a/src/d3d9/d3d9_adapter.cpp b/src/d3d9/d3d9_adapter.cpp
-index a502b3eb..d231a21e 100644
+index a502b3eb..41412baa 100644
 --- a/src/d3d9/d3d9_adapter.cpp
 +++ b/src/d3d9/d3d9_adapter.cpp
 @@ -39,7 +39,8 @@ namespace dxvk {
@@ -70,7 +70,7 @@ index a502b3eb..d231a21e 100644
      pCaps->NumberOfAdaptersInGroup    = 1;
 +
 +    if (!m_adapterGroup.empty()) {
-+      UINT ordinalInGroup = std::find(m_adapterGroup.begin(), m_adapterGroup.end(), this) - m_adapterGroup.begin();
++      UINT ordinalInGroup = std::distance(m_adapterGroup.begin(), std::find(m_adapterGroup.begin(), m_adapterGroup.end(), this));
 +
 +      pCaps->MasterAdapterOrdinal     = m_adapterGroup.front()->GetOrdinal();
 +      pCaps->AdapterOrdinalInGroup    = ordinalInGroup;

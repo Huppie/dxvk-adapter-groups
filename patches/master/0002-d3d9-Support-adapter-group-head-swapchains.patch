@@ -1,4 +1,4 @@
-From edef017c84838416d9916c02df4a9e71e6e27720 Mon Sep 17 00:00:00 2001
+From be4c92af6591c1d800342a8d1b185f1094b0c4ea Mon Sep 17 00:00:00 2001
 From: IJsbrand Slob <ijsbrand@mirast.com>
 Date: Tue, 3 Nov 2026 17:55:16 +0100
 Subject: [PATCH 2/5] [d3d9] Support adapter group head swapchains
@@ -14,10 +14,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  3 files changed, 43 insertions(+), 4 deletions(-)
 
 diff --git a/src/d3d9/d3d9_swapchain.cpp b/src/d3d9/d3d9_swapchain.cpp
-index 9fb8667a..b7612e86 100644
+index ea92b4f0..b672e989 100644
 --- a/src/d3d9/d3d9_swapchain.cpp
 +++ b/src/d3d9/d3d9_swapchain.cpp
-@@ -646,7 +646,9 @@ namespace dxvk {
+@@ -644,7 +644,9 @@ namespace dxvk {
          this->LeaveFullscreenMode();
      }
      else {
@@ -28,7 +28,7 @@ index 9fb8667a..b7612e86 100644
  
        if (changeFullscreen) {
          hr = this->EnterFullscreenMode(pPresentParams, pFullscreenDisplayMode);
-@@ -1150,6 +1152,10 @@ namespace dxvk {
+@@ -1102,6 +1104,10 @@ namespace dxvk {
            frameRate = -m_displayRefreshRate / double(SyncInterval);
        }
  
@@ -39,7 +39,7 @@ index 9fb8667a..b7612e86 100644
        m_wctx->presenter->setFrameRateLimit(frameRate, GetActualFrameLatency());
        m_targetFrameRate = frameRate;
      }
-@@ -1266,7 +1272,8 @@ namespace dxvk {
+@@ -1218,7 +1224,8 @@ namespace dxvk {
          return D3DERR_INVALIDCALL;
      }
      
@@ -49,7 +49,7 @@ index 9fb8667a..b7612e86 100644
      
      return D3D_OK;
    }
-@@ -1289,7 +1296,8 @@ namespace dxvk {
+@@ -1241,7 +1248,8 @@ namespace dxvk {
      }
      wsi::restoreWindowState(m_window, &m_windowState, false);
  
@@ -59,7 +59,7 @@ index 9fb8667a..b7612e86 100644
      
      return D3D_OK;
    }
-@@ -1315,8 +1323,19 @@ namespace dxvk {
+@@ -1267,8 +1275,19 @@ namespace dxvk {
      
      HMONITOR monitor = m_adapter->GetMonitor();
  
@@ -80,7 +80,7 @@ index 9fb8667a..b7612e86 100644
  
      m_displayRefreshRate = 0.0;
  
-@@ -1333,6 +1352,10 @@ namespace dxvk {
+@@ -1285,6 +1304,10 @@ namespace dxvk {
    HRESULT D3D9SwapChainEx::RestoreDisplayMode(HMONITOR hMonitor) {
      if (hMonitor == nullptr)
        return D3DERR_INVALIDCALL;
@@ -91,7 +91,7 @@ index 9fb8667a..b7612e86 100644
      
      if (!wsi::restoreDisplayMode())
        return D3DERR_NOTAVAILABLE;
-@@ -1341,6 +1364,10 @@ namespace dxvk {
+@@ -1293,6 +1316,10 @@ namespace dxvk {
      return D3D_OK;
    }
  
@@ -103,10 +103,10 @@ index 9fb8667a..b7612e86 100644
      const bool isWindowed = m_presentParams.Windowed;
  
 diff --git a/src/d3d9/d3d9_swapchain.h b/src/d3d9/d3d9_swapchain.h
-index aecc443b..f75268aa 100644
+index 66b75b86..330b2110 100644
 --- a/src/d3d9/d3d9_swapchain.h
 +++ b/src/d3d9/d3d9_swapchain.h
-@@ -133,6 +133,8 @@ namespace dxvk {
+@@ -132,6 +132,8 @@ namespace dxvk {
  
      D3D9Adapter* GetAdapter() const { return m_adapter; }
  

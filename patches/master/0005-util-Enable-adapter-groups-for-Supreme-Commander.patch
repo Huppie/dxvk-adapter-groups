@@ -1,4 +1,4 @@
-From a917d46552d7873d55cc1a2b7bf163b65de15df7 Mon Sep 17 00:00:00 2001
+From f9281edce8f28745519b2c739b19465f0f3ff306 Mon Sep 17 00:00:00 2001
 From: IJsbrand Slob <ijsbrand@mirast.com>
 Date: Tue, 3 Nov 2026 17:55:46 +0100
 Subject: [PATCH 5/5] [util] Enable adapter groups for Supreme Commander

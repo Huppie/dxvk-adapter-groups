@@ -1,4 +1,4 @@
-From befdc687946adc6c19893c5e9f7db46d1d1b3969 Mon Sep 17 00:00:00 2001
+From 043a1ca4c2486dd5915d1cd7725a2697c3472000 Mon Sep 17 00:00:00 2001
 From: IJsbrand Slob <ijsbrand@mirast.com>
 Date: Tue, 3 Nov 2026 17:54:44 +0100
 Subject: [PATCH 1/5] [d3d9] Query monitors through the adapter
@@ -59,46 +59,46 @@ index 8cb7fbf3..a502b3eb 100644
        if (devMode.interlaced)
          continue;
 diff --git a/src/d3d9/d3d9_device.cpp b/src/d3d9/d3d9_device.cpp
-index 1c34094d..846a8f07 100644
+index df93527e..f8227cb2 100644
 --- a/src/d3d9/d3d9_device.cpp
 +++ b/src/d3d9/d3d9_device.cpp
 @@ -4519,7 +4519,7 @@ namespace dxvk {
      m_implicitSwapchain->Invalidate(pPresentationParameters->hDeviceWindow);
  
      try {
--      auto* swapchain = new D3D9SwapChainEx(this, pPresentationParameters, pFullscreenDisplayMode, false);
-+      auto* swapchain = new D3D9SwapChainEx(this, pPresentationParameters, pFullscreenDisplayMode, false, m_adapter);
+-      auto* swapchain = new D3D9SwapChainEx(this, pPresentationParameters, pFullscreenDisplayMode);
++      auto* swapchain = new D3D9SwapChainEx(this, pPresentationParameters, pFullscreenDisplayMode, m_adapter);
        *ppSwapChain = ref(swapchain);
        m_losableResourceCounter++;
      }
-@@ -8887,7 +8887,7 @@ namespace dxvk {
+@@ -8869,7 +8869,7 @@ namespace dxvk {
          return hr;
      }
      else {
--      m_implicitSwapchain = new D3D9SwapChainEx(this, pPresentationParameters, pFullscreenDisplayMode, true);
-+      m_implicitSwapchain = new D3D9SwapChainEx(this, pPresentationParameters, pFullscreenDisplayMode, true, m_adapter);
+-      m_implicitSwapchain = new D3D9SwapChainEx(this, pPresentationParameters, pFullscreenDisplayMode);
++      m_implicitSwapchain = new D3D9SwapChainEx(this, pPresentationParameters, pFullscreenDisplayMode, m_adapter);
        m_mostRecentlyUsedSwapchain = m_implicitSwapchain.ptr();
      }
  
 diff --git a/src/d3d9/d3d9_swapchain.cpp b/src/d3d9/d3d9_swapchain.cpp
-index 79e13143..9fb8667a 100644
+index 28839592..ea92b4f0 100644
 --- a/src/d3d9/d3d9_swapchain.cpp
 +++ b/src/d3d9/d3d9_swapchain.cpp
-@@ -17,10 +17,12 @@ namespace dxvk {
+@@ -16,10 +16,12 @@ namespace dxvk {
+   D3D9SwapChainEx::D3D9SwapChainEx(
            D3D9DeviceEx*          pDevice,
            D3DPRESENT_PARAMETERS* pPresentParams,
-     const D3DDISPLAYMODEEX*      pFullscreenDisplayMode,
--          bool                   EnableLatencyTracking)
-+          bool                   EnableLatencyTracking,
+-    const D3DDISPLAYMODEEX*      pFullscreenDisplayMode)
++    const D3DDISPLAYMODEEX*      pFullscreenDisplayMode,
 +          D3D9Adapter*           pAdapter)
      : D3D9SwapChainExBase(pDevice)
      , m_device           (pDevice->GetDXVKDevice())
      , m_frameLatencyCap  (pDevice->GetOptions()->maxFrameLatency)
 +    , m_adapter          (pAdapter)
-     , m_latencyTracking  (EnableLatencyTracking)
      , m_swapchainExt     (this) {
      this->NormalizePresentParameters(pPresentParams);
-@@ -605,7 +607,7 @@ namespace dxvk {
+     m_presentParams = *pPresentParams;
+@@ -603,7 +605,7 @@ namespace dxvk {
  
        wsi::WsiMode devMode = { };
  
@@ -107,7 +107,7 @@ index 79e13143..9fb8667a 100644
          Logger::err("D3D9SwapChainEx::GetDisplayModeEx: Failed to enum display settings");
          return D3DERR_INVALIDCALL;
        }
-@@ -833,7 +835,7 @@ namespace dxvk {
+@@ -828,7 +830,7 @@ namespace dxvk {
          pPresentParams->BackBufferHeight ? nullptr : &pPresentParams->BackBufferHeight);
      }
      else {
@@ -116,7 +116,7 @@ index 79e13143..9fb8667a 100644
          pPresentParams->BackBufferWidth  ? nullptr : &pPresentParams->BackBufferWidth,
          pPresentParams->BackBufferHeight ? nullptr : &pPresentParams->BackBufferHeight);
      }
-@@ -1255,7 +1257,7 @@ namespace dxvk {
+@@ -1207,7 +1209,7 @@ namespace dxvk {
  
      D3D9WindowMessageFilter filter(m_window);
      
@@ -125,7 +125,7 @@ index 79e13143..9fb8667a 100644
  
      wsi::saveWindowState(m_window, &m_windowState, true);
  
-@@ -1311,7 +1313,7 @@ namespace dxvk {
+@@ -1263,7 +1265,7 @@ namespace dxvk {
  
      wsi::WsiMode wsiMode = ConvertDisplayMode(mode);
      
@@ -135,20 +135,20 @@ index 79e13143..9fb8667a 100644
      if (!wsi::setWindowMode(monitor, m_window, &m_windowState, wsiMode))
        return D3DERR_NOTAVAILABLE;
 diff --git a/src/d3d9/d3d9_swapchain.h b/src/d3d9/d3d9_swapchain.h
-index 643eac04..aecc443b 100644
+index f4b30b2f..66b75b86 100644
 --- a/src/d3d9/d3d9_swapchain.h
 +++ b/src/d3d9/d3d9_swapchain.h
-@@ -70,7 +70,8 @@ namespace dxvk {
+@@ -69,7 +69,8 @@ namespace dxvk {
+     D3D9SwapChainEx(
              D3D9DeviceEx*          pDevice,
              D3DPRESENT_PARAMETERS* pPresentParams,
-       const D3DDISPLAYMODEEX*      pFullscreenDisplayMode,
--            bool                   EnableLatencyTracking);
-+            bool                   EnableLatencyTracking,
+-      const D3DDISPLAYMODEEX*      pFullscreenDisplayMode);
++      const D3DDISPLAYMODEEX*      pFullscreenDisplayMode,
 +            D3D9Adapter*           pAdapter);
  
      ~D3D9SwapChainEx();
  
-@@ -130,6 +131,8 @@ namespace dxvk {
+@@ -129,6 +130,8 @@ namespace dxvk {
  
      const D3DPRESENT_PARAMETERS* GetPresentParams() const { return &m_presentParams; }
  
@@ -157,7 +157,7 @@ index 643eac04..aecc443b 100644
      void SyncFrameLatency();
  
      void DestroyBackBuffers();
-@@ -169,6 +172,8 @@ namespace dxvk {
+@@ -168,6 +171,8 @@ namespace dxvk {
      HWND                      m_window   = nullptr;
      HMONITOR                  m_monitor  = nullptr;
  
