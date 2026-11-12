@@ -67,8 +67,10 @@ Roll back with `cp d3d9.dll.bak d3d9.dll`, or reinstall faf-linux's stock DLL fr
 remove files it doesn't know from its `bin` folder. If you only need dual screen with a third display
 connected, disabling that display in Windows' display settings is simpler.
 
-The release archives use the official DXVK layout (`dxvk-<version>-adaptergroups/x32/*.dll`)
-and also contain the patches and the DXVK license.
+The release archives are a drop-in for the official DXVK archive: `dxvk-<release>/` with
+`x32/` and `x64/`, plus the patches and the DXVK license. For example,
+`dxvk-2.7.1-adaptergroups.3.tar.gz` extracts to `dxvk-2.7.1-adaptergroups.3/`. The game itself
+only needs the 32-bit `d3d9.dll`.
 
 ## Enable the second screen
 
@@ -100,8 +102,9 @@ upstream master still lacks (the three-screen limit), [`patches/v2.7.1/`](patche
 the full backport to DXVK 2.7.1. The adapter-group patches themselves went upstream in
 [doitsujin/dxvk#6024](https://github.com/doitsujin/dxvk/pull/6024).
 [`build.yml`](.github/workflows/build.yml) applies a series to upstream DXVK and builds the
-32-bit DLLs on Debian 13.1 with mingw-w64 (posix threads), with the same options as upstream's
-`package-release.sh`. A build of ref `X` uses `patches/X/` if it exists, else `patches/master/`.
+32-bit and 64-bit DLLs on Debian 13.1 with mingw-w64 (posix threads), with the same options
+as upstream's `package-release.sh`. A build of ref `X` uses `patches/X/` if it exists, else
+`patches/master/`.
 
 - **Push to `main`**: builds each patch set the push changed (`patches/master/` builds DXVK
   master, `patches/v2.7.1/` builds v2.7.1). Pushes that touch no patches build every set;

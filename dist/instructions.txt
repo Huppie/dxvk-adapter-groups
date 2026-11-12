@@ -5,6 +5,9 @@ Unofficial DXVK build for Supreme Commander / Forged Alliance dual-screen under
 Wine/Proton. Not affiliated with DXVK or FAF; report problems at
 https://github.com/Huppie/dxvk-supcom-fix
 
+This archive has the same layout as an official DXVK release (x32/ and x64/),
+so it can replace one. The game itself only needs the 32-bit x32/d3d9.dll.
+
 Install (faf-linux)
 -------------------
 Close the game, then:
