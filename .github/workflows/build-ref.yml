@@ -22,6 +22,7 @@ jobs:
       patchset: ${{ steps.r.outputs.patchset }}
       patchdir: ${{ steps.r.outputs.patchdir }}
       skip: ${{ steps.r.outputs.skip }}
+      latest: ${{ steps.r.outputs.latest }}
     steps:
       - uses: actions/checkout@v4
       - id: r
@@ -35,14 +36,14 @@ jobs:
 
           if git ls-remote --exit-code "$url" "refs/tags/$ref" >/dev/null; then
             sha=$(gh api "repos/$UPSTREAM/commits/$ref" -q .sha)
-            version="${ref#v}"; base="$ref"
+            version="${ref#v}"; base="$ref"; latest=true
           elif [[ "$ref" =~ ^[0-9a-f]{7,40}$ ]]; then
             sha=$(gh api "repos/$UPSTREAM/commits/$ref" -q .sha)
             status=$(gh api "repos/$UPSTREAM/compare/master...$sha" -q .status)
             [[ "$status" =~ ^(behind|identical)$ ]] && branch=master || branch=git
-            version="$branch-${sha:0:8}"; base="$version"
+            version="$branch-${sha:0:8}"; base="$version"; latest=false
           elif branch_sha=$(git ls-remote --exit-code "$url" "refs/heads/$ref" | cut -f1); then
-            sha="$branch_sha"; version="$ref-${sha:0:8}"; base="$version"
+            sha="$branch_sha"; version="$ref-${sha:0:8}"; base="$version"; latest=false
           else
             echo "::error::Unknown DXVK ref: $ref"; exit 1
           fi
@@ -60,9 +61,9 @@ jobs:
           fi
 
           tag="$base-adaptergroups.$((n + 1))"
-          echo "ref=$ref sha=$sha version=$version tag=$tag patchdir=$patchdir patchset=$patchset skip=$skip"
+          echo "ref=$ref sha=$sha version=$version tag=$tag patchdir=$patchdir patchset=$patchset skip=$skip latest=$latest"
           { echo "ref=$ref"; echo "sha=$sha"; echo "version=$version"; echo "tag=$tag"
-            echo "patchdir=$patchdir"; echo "patchset=$patchset"; echo "skip=$skip"; } >> "$GITHUB_OUTPUT"
+            echo "patchdir=$patchdir"; echo "patchset=$patchset"; echo "skip=$skip"; echo "latest=$latest"; } >> "$GITHUB_OUTPUT"
 
   build:
     needs: resolve
@@ -92,7 +93,7 @@ jobs:
           cd dxvk
           git checkout --detach "${{ needs.resolve.outputs.sha }}"
           git submodule update --init --recursive --depth 1
-          git -c user.name="dxvk-adapter-groups CI" -c user.email="ci@invalid" \
+          git -c user.name="dxvk-supcom-fix CI" -c user.email="ci@invalid" \
             am "$GITHUB_WORKSPACE/repo/$PATCHDIR"/*.patch
 
       - name: Build
@@ -144,17 +145,18 @@ jobs:
           SHA: ${{ needs.resolve.outputs.sha }}
           PATCHSET: ${{ needs.resolve.outputs.patchset }}
           PATCHDIR: ${{ needs.resolve.outputs.patchdir }}
+          LATEST: ${{ needs.resolve.outputs.latest }}
         run: |
           {
-            echo "Unofficial DXVK build: upstream \`$REF\` (doitsujin/dxvk@$SHA) plus the adapter-group patches."
+            echo "Unofficial DXVK build: upstream \`$REF\` (doitsujin/dxvk@$SHA) plus the patches listed below."
             echo "Not affiliated with DXVK or FAF. Report problems in this repository."
             echo
             echo "Patches ([\`$PATCHDIR\`](https://github.com/$GITHUB_REPOSITORY/tree/$GITHUB_SHA/$PATCHDIR)):"
-            sed -n 's/^Subject: \[PATCH [0-9]*\/[0-9]*\] /- /p' "$PATCHDIR"/*.patch
+            awk 'FNR==1{if(t!="") print t; t=""; done=0} t!=""{if(/^ /){t=t $0; next} print t; t=""} !done && /^Subject: /{t=$0; sub(/^Subject: \[PATCH[^]]*\] /, "- ", t); done=1} END{if(t!="") print t}' "$PATCHDIR"/*.patch
             echo
             echo "Install: replace your 32-bit \`d3d9.dll\` with the one attached; see the [README](https://github.com/$GITHUB_REPOSITORY#readme)."
             echo
             echo "Patch set: \`$PATCHSET\`"
           } > notes.md
-          gh release create "$TAG" out/* --title "$TAG" --notes-file notes.md --target "$GITHUB_SHA"
+          gh release create "$TAG" out/* --title "$TAG" --notes-file notes.md --target "$GITHUB_SHA" --latest="$LATEST"
 
