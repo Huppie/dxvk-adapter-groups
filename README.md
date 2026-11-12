@@ -1,4 +1,4 @@
-# DXVK with adapter groups (unofficial)
+# DXVK dual-screen fix for Supreme Commander (unofficial)
 
 **Unofficial** build of [DXVK](https://github.com/doitsujin/dxvk) with adapter-group patches,
 for Supreme Commander and Forged Alliance players on Linux. Not affiliated with DXVK or FAF.

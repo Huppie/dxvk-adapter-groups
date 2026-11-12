@@ -1,9 +1,9 @@
-DXVK with adapter-group patches (UNOFFICIAL)
-============================================
+DXVK dual-screen fix for Supreme Commander (UNOFFICIAL)
+=======================================================
 
 Unofficial DXVK build for Supreme Commander / Forged Alliance dual-screen under
 Wine/Proton. Not affiliated with DXVK or FAF; report problems at
-https://github.com/Huppie/dxvk-adapter-groups
+https://github.com/Huppie/dxvk-supcom-fix
 
 Install (faf-linux)
 -------------------
