@@ -53,10 +53,10 @@ jobs:
           patchset=$({ echo "$patchdir"; cat "$patchdir"/*.patch; } | sha256sum | cut -c1-12)
           releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
             -q ".[] | select(.tag_name | startswith(\"$base-adaptergroups.\")) | [.tag_name, .body] | @json")
-          n=$(jq -rs '[.[] | fromjson | .[0] | sub(".*\\."; "") | tonumber] | max // 0' <<<"$releases")
+          n=$(jq -rs '[.[] | .[0] | sub(".*\\."; "") | tonumber] | max // 0' <<<"$releases")
           skip=false
           if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch ]] &&
-             jq -es --arg p "Patch set: \`$patchset\`" 'any(.[] | fromjson | .[1]; contains($p))' <<<"$releases" >/dev/null; then
+             jq -es --arg p "Patch set: \`$patchset\`" 'any(.[] | .[1]; contains($p))' <<<"$releases" >/dev/null; then
             skip=true
           fi
 
