@@ -1,7 +1,7 @@
-From 2b02d1d51646a650c94ff79c3f229335527e12d6 Mon Sep 17 00:00:00 2001
+From b7615a31dd1dc1cb359d5a71ec98d58f77645be6 Mon Sep 17 00:00:00 2001
 From: IJsbrand Slob <ijsbrand@mirast.com>
 Date: Tue, 3 Nov 2026 17:55:33 +0100
-Subject: [PATCH 4/5] [d3d9] Add an adapterGroups config option
+Subject: [PATCH 4/6] [d3d9] Add an adapterGroups config option
 
 Reports displays on the same Vulkan device as one adapter group
 and maps each adapter to its own display.
@@ -17,7 +17,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  6 files changed, 90 insertions(+), 5 deletions(-)
 
 diff --git a/dxvk.conf b/dxvk.conf
-index d3b27f30..1f887e77 100644
+index d3b27f30..d9be65a5 100644
 --- a/dxvk.conf
 +++ b/dxvk.conf
 @@ -771,6 +771,19 @@
@@ -34,7 +34,7 @@ index d3b27f30..1f887e77 100644
 +# Supported values:
 +# - True/False
 +
-+# d3d9.adapterGroups = False
++# d3d9.adapterGroups = True
 +
 +
  # Cached write-only Buffers
@@ -203,14 +203,14 @@ index dbd2e5b7..9297fa13 100644
      }
  
 diff --git a/src/d3d9/d3d9_options.cpp b/src/d3d9/d3d9_options.cpp
-index e46864e2..77776c80 100644
+index e46864e2..bc98dc99 100644
 --- a/src/d3d9/d3d9_options.cpp
 +++ b/src/d3d9/d3d9_options.cpp
 @@ -64,6 +64,7 @@ namespace dxvk {
      this->modeCountCompatibility        = config.getOption<bool>        ("d3d9.modeCountCompatibility",        false);
      this->allowDiscard                  = config.getOption<bool>        ("d3d9.allowDiscard",                  true);
      this->enumerateByDisplays           = config.getOption<bool>        ("d3d9.enumerateByDisplays",           true);
-+    this->adapterGroups                 = config.getOption<bool>        ("d3d9.adapterGroups",                 false);
++    this->adapterGroups                 = config.getOption<bool>        ("d3d9.adapterGroups",                 true);
      this->cachedWriteOnlyBuffers        = config.getOption<bool>        ("d3d9.cachedWriteOnlyBuffers",        false);
      this->deviceLocalConstantBuffers    = config.getOption<Tristate>    ("d3d9.deviceLocalConstantBuffers",    Tristate::Auto);
      this->allowDirectBufferMapping      = config.getOption<bool>        ("d3d9.allowDirectBufferMapping",      true);

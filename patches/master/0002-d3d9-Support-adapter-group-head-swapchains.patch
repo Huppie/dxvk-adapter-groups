@@ -1,7 +1,7 @@
 From be4c92af6591c1d800342a8d1b185f1094b0c4ea Mon Sep 17 00:00:00 2001
 From: IJsbrand Slob <ijsbrand@mirast.com>
 Date: Tue, 3 Nov 2026 17:55:16 +0100
-Subject: [PATCH 2/5] [d3d9] Support adapter group head swapchains
+Subject: [PATCH 2/6] [d3d9] Support adapter group head swapchains
 
 Subordinate heads leave device loss, frame pacing and display modes
 to head 0.

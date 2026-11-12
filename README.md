@@ -19,8 +19,12 @@ Supreme Commander / Forged Alliance draws its second-screen view through one D3D
 *adapter-group* device (`D3DCREATE_ADAPTERGROUP_DEVICE`, two heads, one `Present`).
 Upstream DXVK doesn't support that, so under Wine/Proton the second screen stays dark or the
 main screen drops to a low resolution. These patches add adapter-group support to DXVK's
-d3d9. It switches itself on for `SupremeCommander.exe` and `ForgedAlliance.exe` through
-DXVK's app profile (`d3d9.adapterGroups`); other games are unaffected.
+d3d9 (`d3d9.adapterGroups`).
+
+- **`v2.7.1` builds**: switched on for `SupremeCommander.exe` and `ForgedAlliance.exe` through
+  DXVK's app profile; other games are unaffected.
+- **`master` builds**: on by default. Other D3D9 games then see each display as its own adapter,
+  as on Windows, and only get a multi-screen device if they ask for one.
 
 Requirements: both monitors on the same GPU, every head fullscreen.
 

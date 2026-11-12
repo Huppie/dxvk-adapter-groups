@@ -1,7 +1,7 @@
 From 043a1ca4c2486dd5915d1cd7725a2697c3472000 Mon Sep 17 00:00:00 2001
 From: IJsbrand Slob <ijsbrand@mirast.com>
 Date: Tue, 3 Nov 2026 17:54:44 +0100
-Subject: [PATCH 1/5] [d3d9] Query monitors through the adapter
+Subject: [PATCH 1/6] [d3d9] Query monitors through the adapter
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---

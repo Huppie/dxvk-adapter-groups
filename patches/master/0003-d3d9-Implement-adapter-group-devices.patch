@@ -1,7 +1,7 @@
 From 74a885a52967ee0f805fca578b3824fd370813ad Mon Sep 17 00:00:00 2001
 From: IJsbrand Slob <ijsbrand@mirast.com>
 Date: Tue, 3 Nov 2026 17:55:16 +0100
-Subject: [PATCH 3/5] [d3d9] Implement adapter group devices
+Subject: [PATCH 3/6] [d3d9] Implement adapter group devices
 
 Creates one implicit swapchain per head for D3DCREATE_ADAPTERGROUP_DEVICE.
 Inactive until adapters report an adapter group.
