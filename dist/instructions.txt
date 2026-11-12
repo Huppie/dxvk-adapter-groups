@@ -26,6 +26,9 @@ resolution, then restart the game. Changing some other options (anti-aliasing,
 for example) can reset Secondary Adapter to disabled; check it first if the
 second screen goes dark.
 
+With three or more displays on the GPU, the game uses the primary display and
+the next one in the system's display order; the others stay on.
+
 Roll back
 ---------
   cp ~/faf-linux/prefix/drive_c/windows/syswow64/d3d9.dll.bak \

@@ -24,6 +24,13 @@ DXVK's app profile (`d3d9.adapterGroups`); other games are unaffected.
 
 Requirements: both monitors on the same GPU, every head fullscreen.
 
+**Three or more screens**: the game sets up two screens, while D3D9 expects one per display
+on the GPU. With a third display on the same GPU, device creation fails and the game falls back
+to one screen at a low resolution. Windows has the same problem; players there disable the third
+display. The patches limit the game to two screens (`d3d9.maxAdapterGroupHeads = 2`), so the third
+display can stay on. The game gets the primary display and the next one in the system's display
+order; which one that is can't be chosen yet.
+
 ## Install
 
 The game is 32-bit, so only the 32-bit `d3d9.dll` matters. Close the game first.
@@ -41,6 +48,12 @@ Roll back with `cp d3d9.dll.bak d3d9.dll`, or reinstall faf-linux's stock DLL fr
 
 **Other Proton**: replace `files/lib/wine/dxvk/i386-windows/d3d9.dll` in the Proton folder
 (keep a backup). Don't put it in FAF's `bin` folder; the FAF client manages that.
+
+**Windows**: untested. These are standard DXVK DLLs, so putting the 32-bit `d3d9.dll` next to
+`ForgedAlliance.exe` should work if your GPU and driver meet DXVK's
+[requirements](https://github.com/doitsujin/dxvk/wiki/Driver-support), but the FAF client may
+remove files it doesn't know from its `bin` folder. If you only need dual screen with a third display
+connected, disabling that display in Windows' display settings is simpler.
 
 The release archives use the official DXVK layout (`dxvk-<version>-adaptergroups/x32/*.dll`)
 and also contain the patches and the DXVK license.

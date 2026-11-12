@@ -1,0 +1,30 @@
+From 83808dfd112dc7d6907d67ba262d5e67f6bca92a Mon Sep 17 00:00:00 2001
+From: Erwin <72449986+erwingies@users.noreply.github.com>
+Date: Thu, 12 Nov 2026 14:08:47 +0100
+Subject: [PATCH 7/7] [util] Limit Supreme Commander adapter groups to two
+ heads
+
+The game creates its adapter group device with present parameters for
+two heads. With a third display on the same GPU, device creation fails
+and the game falls back to a single 1024x768 head.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/util/config/config.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/util/config/config.cpp b/src/util/config/config.cpp
+index 7b5c95e0..11095b81 100644
+--- a/src/util/config/config.cpp
++++ b/src/util/config/config.cpp
+@@ -783,6 +783,7 @@ namespace dxvk {
+     { R"(\\(SupremeCommander|ForgedAlliance)\.exe$)", {{
+       { "d3d9.floatEmulation",            "Strict" },
+       { "d3d9.adapterGroups",               "True" },
++      { "d3d9.maxAdapterGroupHeads",           "2" },
+     }} },
+     /* Bionic Commando                            *
+      * Physics break at high fps                  */
+-- 
+2.53.0
+

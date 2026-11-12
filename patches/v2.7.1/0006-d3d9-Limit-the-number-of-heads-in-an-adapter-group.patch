@@ -1,0 +1,102 @@
+From 8be0c8e902637d6b28b8ba68a716055f5da54875 Mon Sep 17 00:00:00 2001
+From: Erwin <72449986+erwingies@users.noreply.github.com>
+Date: Thu, 12 Nov 2026 14:08:47 +0100
+Subject: [PATCH 6/7] [d3d9] Limit the number of heads in an adapter group
+
+Adds d3d9.maxAdapterGroupHeads for games that create adapter group
+devices with a fixed number of heads. Displays past the limit form
+further groups, each led by its lowest adapter ordinal.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ dxvk.conf                   | 13 +++++++++++++
+ src/d3d9/d3d9_interface.cpp | 14 ++++++++++++--
+ src/d3d9/d3d9_options.cpp   |  1 +
+ src/d3d9/d3d9_options.h     |  3 +++
+ 4 files changed, 29 insertions(+), 2 deletions(-)
+
+diff --git a/dxvk.conf b/dxvk.conf
+index 7137a7f2..c594cb16 100644
+--- a/dxvk.conf
++++ b/dxvk.conf
+@@ -752,6 +752,19 @@
+ 
+ # d3d9.adapterGroups = False
+ 
++# Adapter Group Head Limit
++#
++# Limits the number of displays in one adapter group, for games that
++# create adapter group devices with a fixed number of heads. Displays
++# past the limit form further groups. Has no effect if d3d9.adapterGroups
++# is disabled.
++#
++# Supported values:
++# - 0 for no limit
++# - Any positive number to limit the number of heads per group
++
++# d3d9.maxAdapterGroupHeads = 0
++
+ # Cached Dynamic Buffers
+ #
+ # Allocates dynamic resources in D3DPOOL_DEFAULT in
+diff --git a/src/d3d9/d3d9_interface.cpp b/src/d3d9/d3d9_interface.cpp
+index 7435d68c..78f47d83 100644
+--- a/src/d3d9/d3d9_interface.cpp
++++ b/src/d3d9/d3d9_interface.cpp
+@@ -71,15 +71,25 @@ namespace dxvk {
+       }
+ 
+       if (m_d3d9Options.adapterGroups) {
++        const size_t maxHeads = m_d3d9Options.maxAdapterGroupHeads > 0
++          ? size_t(m_d3d9Options.maxAdapterGroupHeads)
++          : m_adapters.size();
++
+         for (auto& adapter : m_adapters) {
++          if (!adapter.GetAdapterGroup().empty())
++            continue;
++
+           std::vector<D3D9Adapter*> group;
+ 
+           for (auto& member : m_adapters) {
+-            if (member.GetDXVKAdapter() == adapter.GetDXVKAdapter())
++            if (group.size() < maxHeads
++             && member.GetAdapterGroup().empty()
++             && member.GetDXVKAdapter() == adapter.GetDXVKAdapter())
+               group.push_back(&member);
+           }
+ 
+-          adapter.SetAdapterGroup(std::move(group));
++          for (auto* member : group)
++            member->SetAdapterGroup(std::vector<D3D9Adapter*>(group));
+         }
+       }
+     }
+diff --git a/src/d3d9/d3d9_options.cpp b/src/d3d9/d3d9_options.cpp
+index 2db58d12..8d9f18d0 100644
+--- a/src/d3d9/d3d9_options.cpp
++++ b/src/d3d9/d3d9_options.cpp
+@@ -66,6 +66,7 @@ namespace dxvk {
+     this->allowDiscard                  = config.getOption<bool>        ("d3d9.allowDiscard",                  true);
+     this->enumerateByDisplays           = config.getOption<bool>        ("d3d9.enumerateByDisplays",           true);
+     this->adapterGroups                 = config.getOption<bool>        ("d3d9.adapterGroups",                 false);
++    this->maxAdapterGroupHeads          = config.getOption<int32_t>     ("d3d9.maxAdapterGroupHeads",          0);
+     this->cachedDynamicBuffers          = config.getOption<bool>        ("d3d9.cachedDynamicBuffers",          false);
+     this->deviceLocalConstantBuffers    = config.getOption<bool>        ("d3d9.deviceLocalConstantBuffers",    false);
+     this->allowDirectBufferMapping      = config.getOption<bool>        ("d3d9.allowDirectBufferMapping",      true);
+diff --git a/src/d3d9/d3d9_options.h b/src/d3d9/d3d9_options.h
+index 984cebd8..8a1d7e1e 100644
+--- a/src/d3d9/d3d9_options.h
++++ b/src/d3d9/d3d9_options.h
+@@ -128,6 +128,9 @@ namespace dxvk {
+     /// Report displays on the same Vulkan device as one adapter group
+     bool adapterGroups;
+ 
++    /// Maximum number of heads per adapter group, 0 for no limit
++    int32_t maxAdapterGroupHeads;
++
+     /// Cached dynamic buffers: Maps all buffers in cached memory.
+     bool cachedDynamicBuffers;
+ 
+-- 
+2.53.0
+
