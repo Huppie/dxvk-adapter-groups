@@ -1,15 +1,22 @@
 # DXVK with adapter groups (unofficial)
 
-**Unofficial** build of [DXVK](https://github.com/doitsujin/dxvk) with an adapter-group patch,
+**Unofficial** build of [DXVK](https://github.com/doitsujin/dxvk) with adapter-group patches,
 for Supreme Commander and Forged Alliance players on Linux. Not affiliated with DXVK or FAF.
 Report problems here, not to DXVK or FAF.
 
+Adapter-group support was merged into upstream DXVK on 12 November 2026
+([#6024](https://github.com/doitsujin/dxvk/pull/6024)) but is not in a DXVK release yet; the
+latest release is 2.7.1. These builds bring it to DXVK 2.7.1 and add a fix for three or more
+screens that upstream doesn't have.
+
 Download a build from [Releases](../../releases). There are two kinds:
 
-- **`v2.7.1-adaptergroups.N`**: DXVK 2.7.1, the version faf-linux ships, plus the patches.
-  Recommended for faf-linux: only `d3d9.dll` differs from what you already run.
-- **`master-<sha8>-adaptergroups.N`**: newer upstream DXVK master (commit `<sha8>`) plus the
-  patches. Use it only with a newer DXVK, for example in a recent Proton.
+- **`v2.7.1-adaptergroups.N`**: DXVK 2.7.1, the version faf-linux ships, plus the backported
+  adapter-group patches and the three-screen fix. Recommended for faf-linux: only `d3d9.dll`
+  differs from what you already run.
+- **`master-<sha8>-adaptergroups.N`**: upstream DXVK master (commit `<sha8>`) plus the patches
+  it still lacks; since the merge that is only the three-screen fix. Use it only with a newer
+  DXVK, for example in a recent Proton.
 
 Take the highest `N` of the kind you need.
 
@@ -17,23 +24,24 @@ Take the highest `N` of the kind you need.
 
 Supreme Commander / Forged Alliance draws its second-screen view through one D3D9
 *adapter-group* device (`D3DCREATE_ADAPTERGROUP_DEVICE`, two heads, one `Present`).
-Upstream DXVK doesn't support that, so under Wine/Proton the second screen stays dark or the
-main screen drops to a low resolution. These patches add adapter-group support to DXVK's
+DXVK up to 2.7.1 doesn't support that, so under Wine/Proton the second screen stays dark or the
+main screen drops to a low resolution. The adapter-group patches add that support to DXVK's
 d3d9 (`d3d9.adapterGroups`).
 
 - **`v2.7.1` builds**: switched on for `SupremeCommander.exe` and `ForgedAlliance.exe` through
   DXVK's app profile; other games are unaffected.
-- **`master` builds**: on by default. Other D3D9 games then see each display as its own adapter,
-  as on Windows, and only get a multi-screen device if they ask for one.
+- **`master` builds**: on by default, as in upstream DXVK. Other D3D9 games then see each
+  display as its own adapter, as on Windows, and only get a multi-screen device if they ask
+  for one.
 
 Requirements: both monitors on the same GPU, every head fullscreen.
 
 **Three or more screens**: the game sets up two screens, while D3D9 expects one per display
 on the GPU. With a third display on the same GPU, device creation fails and the game falls back
 to one screen at a low resolution. Windows has the same problem; players there disable the third
-display. The patches limit the game to two screens (`d3d9.maxAdapterGroupHeads = 2`), so the third
-display can stay on. The game gets the primary display and the next one in the system's display
-order; which one that is can't be chosen yet.
+display. These builds limit the game to two screens (`d3d9.maxAdapterGroupHeads = 2`), so the
+third display can stay on; upstream DXVK doesn't have this limit. The game gets the primary
+display and the next one in the system's display order; which one that is can't be chosen yet.
 
 ## Install
 
@@ -87,9 +95,10 @@ Open an issue with:
 
 ## Source and builds
 
-There is one patch series per DXVK base: [`patches/master/`](patches/master) targets upstream
-master, [`patches/v2.7.1/`](patches/v2.7.1) is the backport to DXVK 2.7.1. The development
-branch is [Huppie/dxvk `adapter-groups-master`](https://github.com/Huppie/dxvk/tree/adapter-groups-master).
+There is one patch series per DXVK base: [`patches/master/`](patches/master) holds what
+upstream master still lacks (the three-screen limit), [`patches/v2.7.1/`](patches/v2.7.1) is
+the full backport to DXVK 2.7.1. The adapter-group patches themselves went upstream in
+[doitsujin/dxvk#6024](https://github.com/doitsujin/dxvk/pull/6024).
 [`build.yml`](.github/workflows/build.yml) applies a series to upstream DXVK and builds the
 32-bit DLLs on Debian 13.1 with mingw-w64 (posix threads), with the same options as upstream's
 `package-release.sh`. A build of ref `X` uses `patches/X/` if it exists, else `patches/master/`.

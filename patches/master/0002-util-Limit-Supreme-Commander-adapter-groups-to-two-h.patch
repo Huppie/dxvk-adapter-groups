@@ -1,7 +1,7 @@
-From aece3745bb7c4988422c336906ffa28b965b6170 Mon Sep 17 00:00:00 2001
+From b7f7be3abbab3a23283a07fa7249d9d90e6e7d20 Mon Sep 17 00:00:00 2001
 From: Erwin <72449986+erwingies@users.noreply.github.com>
 Date: Thu, 12 Nov 2026 14:08:47 +0100
-Subject: [PATCH 6/6] [util] Limit Supreme Commander adapter groups to two
+Subject: [PATCH 2/2] [util] Limit Supreme Commander adapter groups to two
  heads
 
 The game creates its adapter group device with present parameters for
